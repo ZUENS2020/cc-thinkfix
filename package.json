@@ -1,0 +1,40 @@
+{
+  "name": "cc-thinkfix",
+  "version": "0.1.2",
+  "description": "Transparent proxy that fixes Anthropic thinking blocks so Claude Code + LiteLLM just work. Zero config — just run cc-thinkfix claude.",
+  "type": "module",
+  "bin": {
+    "cc-thinkfix": "dist/cli.js"
+  },
+  "main": "dist/proxy.js",
+  "types": "dist/proxy.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js serve",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.0"
+  },
+  "keywords": [
+    "anthropic",
+    "claude-code",
+    "litellm",
+    "thinking",
+    "proxy",
+    "deepseek",
+    "thinking-blocks",
+    "cc-thinkfix"
+  ],
+  "license": "MIT"
+}
