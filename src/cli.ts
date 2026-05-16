@@ -2,7 +2,7 @@
 import { detectUpstream, type ProxyConfig } from "./config.js";
 import { launchClaude } from "./launcher.js";
 import { startProxy } from "./proxy.js";
-import { patchCCSettings, restoreCCSettings } from "./settings.js";
+import { patchCCSettings, restoreCCSettings, selfHeal } from "./settings.js";
 
 const HELP = `cc-thinkfix — transparent proxy that fixes Anthropic thinking blocks
 
@@ -20,6 +20,13 @@ prefixed with 'cc-thinkfix'. No config changes needed.
 `;
 
 async function main() {
+  // Recover from a previous run that didn't clean up (kill -9, crash, etc.)
+  // before reading any config — otherwise we'd read the polluted patched value
+  // as if it were the real upstream.
+  if (selfHeal()) {
+    console.log("[cc-thinkfix] recovered ~/.claude/settings.json from prior unclean exit");
+  }
+
   const args = process.argv.slice(2);
 
   if (args.includes("--help") || args.includes("-h")) {
@@ -87,12 +94,27 @@ async function claudeCommand(claudeArgs: string[]) {
 
   const child = launchClaude(port, claudeArgs);
 
+  let cleanedUp = false;
   const cleanup = async () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
     restoreCCSettings(originalUrl);
     if (originalUrl) {
       console.log("[cc-thinkfix] restored ~/.claude/settings.json");
     }
-    await close();
+    try {
+      await close();
+    } catch {
+      // ignore — we're exiting anyway
+    }
+  };
+
+  // Synchronous cleanup for cases where the event loop won't get a chance to
+  // run async code (uncaught exception, process.exit). Best effort.
+  const cleanupSync = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    restoreCCSettings(originalUrl);
   };
 
   child.on("exit", async (code) => {
@@ -105,6 +127,16 @@ async function claudeCommand(claudeArgs: string[]) {
     await cleanup();
     process.exit(1);
   });
+
+  // launcher.ts already forwards SIGINT/SIGTERM to the child. We additionally
+  // make sure that if we ourselves get killed before the child does, we still
+  // restore settings.json.
+  process.on("uncaughtException", (err) => {
+    console.error("[cc-thinkfix] uncaught:", err);
+    cleanupSync();
+    process.exit(1);
+  });
+  process.on("exit", cleanupSync);
 }
 
 main().catch((err) => {

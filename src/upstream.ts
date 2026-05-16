@@ -22,6 +22,14 @@ function joinUrl(base: string, path: string): string {
   return `${b}/${p}`;
 }
 
+// Build the OpenAI chat-completions URL. Accepts either form of baseUrl —
+// "https://host" or "https://host/v1" — and always emits ".../v1/chat/completions".
+// This lets us share ANTHROPIC_BASE_URL with plain Claude Code (which expects no /v1).
+function chatCompletionsUrl(baseUrl: string): string {
+  const stripped = baseUrl.replace(/\/+$/, "").replace(/\/v1$/i, "");
+  return `${stripped}/v1/chat/completions`;
+}
+
 function authHeaders(cfg: UpstreamConfig): Record<string, string> {
   return {
     "Content-Type": "application/json",
@@ -35,7 +43,7 @@ export async function callUpstream(
   body: OpenAIChatRequest,
   signal?: AbortSignal,
 ): Promise<OpenAIChatResponse> {
-  const res = await fetch(joinUrl(cfg.baseUrl, "/chat/completions"), {
+  const res = await fetch(chatCompletionsUrl(cfg.baseUrl), {
     method: "POST",
     headers: authHeaders(cfg),
     body: JSON.stringify({ ...body, stream: false }),
@@ -53,7 +61,7 @@ export async function callUpstreamStream(
   body: OpenAIChatRequest,
   signal?: AbortSignal,
 ): Promise<AsyncIterable<Uint8Array>> {
-  const res = await fetch(joinUrl(cfg.baseUrl, "/chat/completions"), {
+  const res = await fetch(chatCompletionsUrl(cfg.baseUrl), {
     method: "POST",
     headers: { ...authHeaders(cfg), Accept: "text/event-stream" },
     body: JSON.stringify({ ...body, stream: true }),

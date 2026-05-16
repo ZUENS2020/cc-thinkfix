@@ -20,6 +20,19 @@ function stripTrailingSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
+// Refuse to treat a loopback URL as the upstream. If we ever read one, it
+// means settings.json is in a leftover patched state from a previous run
+// that didn't clean up — using it as the upstream would forward requests
+// to ourselves (infinite loop) or to a stale port (ECONNREFUSED).
+function isLoopback(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function readCCSettings(): ProxyConfig | null {
   if (!existsSync(CC_SETTINGS_PATH)) return null;
   try {
@@ -43,10 +56,30 @@ function readFromEnv(): ProxyConfig | null {
 
 export function detectUpstream(): ProxyConfig {
   const fromCC = readCCSettings();
-  if (fromCC) return fromCC;
+  if (fromCC) {
+    if (isLoopback(fromCC.upstreamBaseUrl)) {
+      console.error(
+        `[cc-thinkfix] ~/.claude/settings.json has a loopback ANTHROPIC_BASE_URL (${fromCC.upstreamBaseUrl}).\n` +
+          "  This means a previous cc-thinkfix run didn't restore the file (likely killed -9 or crashed).\n" +
+          "  Edit ~/.claude/settings.json and set ANTHROPIC_BASE_URL back to your real upstream\n" +
+          "  (e.g. https://litellm.example.com), then try again.",
+      );
+      process.exit(1);
+    }
+    return fromCC;
+  }
 
   const fromEnv = readFromEnv();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    if (isLoopback(fromEnv.upstreamBaseUrl)) {
+      console.error(
+        `[cc-thinkfix] ANTHROPIC_BASE_URL env var is a loopback address (${fromEnv.upstreamBaseUrl}).\n` +
+          "  cc-thinkfix needs to know the real upstream — pointing it at localhost would loop.",
+      );
+      process.exit(1);
+    }
+    return fromEnv;
+  }
 
   console.error(
     "[cc-thinkfix] Cannot detect upstream URL.\n" +
