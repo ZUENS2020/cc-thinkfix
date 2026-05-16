@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { isPidAlive } from "./state.js";
 
 const CC_SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
 const SIDECAR_PATH = join(homedir(), ".claude", ".cc-thinkfix-original.json");
@@ -51,19 +52,6 @@ export function selfHeal(): boolean {
       // ignore
     }
     return false;
-  }
-}
-
-function isPidAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    // Signal 0 = liveness probe, doesn't actually send a signal.
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM means the process exists but we lack permission to signal it —
-    // still counts as alive. ESRCH means no such pid.
-    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 

@@ -11,9 +11,24 @@ import {
 } from "./upstream.js";
 import type { AnthropicMessagesRequest } from "./types.js";
 
+export interface ProxyHandle {
+  port: number;
+  close: () => Promise<void>;
+  /**
+   * Resolves when the proxy server stops listening. Useful for daemon mode
+   * to keep the process alive until a /__shutdown request arrives or some
+   * other code calls close().
+   */
+  closed: Promise<void>;
+}
+
 export function startProxy(
-  config: ProxyConfig,
-): Promise<{ port: number; close: () => Promise<void> }> {
+  config: ProxyConfig & {
+    /** Called when POST /__shutdown is hit. Daemon installs this to do its
+     * own cleanup (state file, settings.json) before the proxy actually closes. */
+    onShutdownRequest?: () => Promise<void> | void;
+  },
+): Promise<ProxyHandle> {
   return new Promise((resolve, reject) => {
     const log = makeLogger(config.logLevel ?? "info");
     const upstreamCfg: UpstreamConfig = {
@@ -21,11 +36,34 @@ export function startProxy(
       apiKey: config.upstreamApiKey,
     };
 
+    let closing = false;
+    let resolveClosed!: () => void;
+    const closed = new Promise<void>((r) => {
+      resolveClosed = r;
+    });
+
     const server = createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
       try {
         if (req.method === "GET" && url.pathname === "/health") {
           return jsonRes(res, 200, { ok: true, name: "cc-thinkfix" });
+        }
+
+        if (req.method === "POST" && url.pathname === "/__shutdown") {
+          if (closing) return jsonRes(res, 200, { ok: true, already: true });
+          closing = true;
+          jsonRes(res, 200, { ok: true });
+          // Defer the actual shutdown so this response can flush, and give the
+          // owning code a hook to run its own teardown first.
+          setImmediate(async () => {
+            try {
+              if (config.onShutdownRequest) await config.onShutdownRequest();
+            } catch (err) {
+              log.error("onShutdownRequest threw", err);
+            }
+            server.close(() => resolveClosed());
+          });
+          return;
         }
 
         if (req.method === "POST" && url.pathname === "/v1/messages") {
@@ -51,10 +89,16 @@ export function startProxy(
       log.info(`  upstream: ${config.upstreamBaseUrl}`);
       resolve({
         port: actualPort,
+        closed,
         close: () =>
-          new Promise<void>((res2, rej2) =>
-            server.close((err) => (err ? rej2(err) : res2())),
-          ),
+          new Promise<void>((res2, rej2) => {
+            closing = true;
+            server.close((err) => {
+              resolveClosed();
+              if (err) rej2(err);
+              else res2();
+            });
+          }),
       });
     });
 
