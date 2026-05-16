@@ -1,6 +1,6 @@
 {
   "name": "cc-thinkfix",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Transparent proxy that fixes Anthropic thinking blocks so Claude Code + LiteLLM just work. Zero config — just run cc-thinkfix claude.",
   "type": "module",
   "bin": {
