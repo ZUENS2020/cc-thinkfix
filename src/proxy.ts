@@ -47,7 +47,7 @@ export function startProxy(
     server.listen(port, "127.0.0.1", () => {
       const addr = server.address();
       const actualPort = typeof addr === "object" && addr ? addr.port : port;
-      log.info(`[cc-thinkfix] listening on http://127.0.0.1:${actualPort}`);
+      log.info(`listening on http://127.0.0.1:${actualPort}`);
       log.info(`  upstream: ${config.upstreamBaseUrl}`);
       resolve({
         port: actualPort,

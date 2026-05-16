@@ -12,6 +12,21 @@ export interface ProxyConfig {
 
 const CC_SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
 
+// Fixed default port so settings.json doesn't churn every run, and so a
+// second `cc-thinkfix claude` can detect the first one with a try-bind.
+// Override via env CC_THINKFIX_PORT or --port.
+export const DEFAULT_PROXY_PORT = 28080;
+
+export function resolvePort(cliPort?: number): number {
+  if (cliPort && Number.isFinite(cliPort)) return cliPort;
+  const envPort = process.env.CC_THINKFIX_PORT;
+  if (envPort) {
+    const n = Number(envPort);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return DEFAULT_PROXY_PORT;
+}
+
 interface CCSettings {
   env?: Record<string, string>;
 }
