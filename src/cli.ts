@@ -19,6 +19,7 @@ import {
   writeStateAtomicLocked,
   type DaemonState,
 } from "./state.js";
+import { checkForUpdates } from "./updater.js";
 
 const DAEMON_LOG_PATH = join(homedir(), ".claude", ".cc-thinkfix-daemon.log");
 
@@ -30,18 +31,23 @@ Usage:
   cc-thinkfix --version
   cc-thinkfix --help
 
-How 'cc-thinkfix claude' works:
+Short alias: 'ccthx' — same as 'cc-thinkfix'.
+
+How 'ccthx claude' works:
   - Reuses (or spawns, if absent) a single background daemon process that
     listens on a free random port and patches ~/.claude/settings.json to
     point at it.
-  - Multiple 'cc-thinkfix claude' invocations share the same daemon.
+  - Multiple 'ccthx claude' invocations share the same daemon.
   - The daemon shuts itself down (restoring settings.json) when the last
     Claude Code wrapper exits.
 
-How 'cc-thinkfix serve' works:
+How 'ccthx serve' works:
   - Standalone foreground proxy. Does NOT patch settings.json.
   - Default port 28080 (override with --port or CC_THINKFIX_PORT).
   - Point your client at http://127.0.0.1:<port>/ manually.
+
+Update checks: cc-thinkfix queries the npm registry at most once per 24h to
+notify you of a newer version. Disable with CC_THINKFIX_DISABLE_UPDATE_CHECK=1.
 `;
 
 async function main() {
@@ -52,6 +58,16 @@ async function main() {
   }
 
   const args = process.argv.slice(2);
+  const command = args[0];
+
+  // Check for available updates from npm. Non-blocking, throttled to ~daily.
+  // Skipped for __daemon (long-lived background process, no user to notify).
+  // Fires before --help/--version branches so users running those commands
+  // also see the banner.
+  if (command !== "__daemon") {
+    const pkg = (await import("../package.json", { with: { type: "json" } })).default;
+    checkForUpdates(pkg.version);
+  }
 
   if (args.includes("--help") || args.includes("-h")) {
     console.log(HELP);
@@ -68,8 +84,6 @@ async function main() {
     console.log(HELP);
     process.exit(2);
   }
-
-  const command = args[0];
 
   if (command === "serve") {
     const portIdx = args.indexOf("--port");

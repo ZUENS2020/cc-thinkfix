@@ -4,7 +4,8 @@
   "description": "Transparent proxy that fixes Anthropic thinking blocks so Claude Code + LiteLLM just work. Zero config — just run cc-thinkfix claude.",
   "type": "module",
   "bin": {
-    "cc-thinkfix": "dist/cli.js"
+    "cc-thinkfix": "dist/cli.js",
+    "ccthx": "dist/cli.js"
   },
   "main": "dist/proxy.js",
   "types": "dist/proxy.d.ts",
